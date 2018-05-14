@@ -128,7 +128,7 @@ func proxyMuxer() {
 	}
 }
 
-var httpAddr = flag.String("http", ":8888", "http listen address")
+var httpAddr = flag.String("http", ":8080", "http listen address")
 
 func main() {
 	flag.Parse()
