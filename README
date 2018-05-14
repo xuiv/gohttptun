@@ -6,7 +6,7 @@ by Andrew Gerrand <adg@golang.org>
 Example usage:
 
 Run 'server' at your endpoint, by default it listens on port 8080.
-	./server
+	./server -http=:8080
 
 Run 'client' on your local machine, by default it listens locally on 2222.
 Use -http=serverAddress:8080 to point to your server, 
