@@ -31,7 +31,7 @@ const bufSize = 1024
 
 var (
 	listenAddr   = flag.String("listen", ":2222", "local listen address")
-	httpAddr     = flag.String("http", "127.0.0.1:8888", "remote tunnel server")
+	httpAddr     = flag.String("http", "127.0.0.1:8080", "remote tunnel server")
 	destAddr     = flag.String("dest", "127.0.0.1:22", "tunnel destination")
 	tickInterval = flag.Int("tick", 250, "update interval (msec)")
 )
