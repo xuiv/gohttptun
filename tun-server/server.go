@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
 	"flag"
 	"io"
 	"io/ioutil"
@@ -24,18 +25,21 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"time"
+	"sync"
+	//"time"
 )
 
 const (
-	readTimeout = 100
+	readTimeout = 1000
 	keyLen      = 64
 )
 
 type proxy struct {
-	C    chan proxyPacket
-	key  string
-	conn net.Conn
+	C      chan proxyPacket
+	key    string
+	conn   net.Conn
+	buf    *bytes.Buffer
+	bufmux *sync.Mutex
 }
 
 type proxyPacket struct {
@@ -45,29 +49,59 @@ type proxyPacket struct {
 }
 
 func NewProxy(key, destAddr string) (p *proxy, err error) {
-	p = &proxy{C: make(chan proxyPacket), key: key}
 	log.Println("Attempting connect", destAddr)
-	p.conn, err = net.Dial("tcp", destAddr)
+	conn, err := net.Dial("tcp", destAddr)
+	p = newproxy(conn, key)
 	if err != nil {
 		return
 	}
-	p.conn.SetReadDeadline(time.Now().Add(time.Millisecond * readTimeout))
+	//p.conn.SetReadDeadline(time.Now().Add(time.Millisecond * readTimeout))
 	log.Println("ResponseWriterected", destAddr)
 	return
 }
 
+func newproxy(conn net.Conn, key string) *proxy {
+	var p = new(proxy)
+	p.C = make(chan proxyPacket)
+	p.key = key
+	p.conn = conn
+	p.buf = new(bytes.Buffer)
+	p.bufmux = new(sync.Mutex)
+	go func() {
+		for {
+			b := make([]byte, 1024)
+			n, _ := p.conn.Read(b)
+			if n > 0 {
+				b = b[:n]
+				p.bufmux.Lock()
+				p.buf.Write(b)
+				p.bufmux.Unlock()
+			}
+		}
+	}()
+	return p
+}
+
 func (p *proxy) handle(pp proxyPacket) {
 	// read from the request body and write to the ResponseWriter
-	_, err := io.Copy(p.conn, pp.r.Body)
-	pp.r.Body.Close()
-	if err == io.EOF {
-		p.conn = nil
-		log.Println("eof", p.key)
-		return
+	//_, err := io.Copy(p.conn, pp.r.Body)
+	b := make([]byte, 65536)
+	n, _ := pp.r.Body.Read(b)
+	if n > 0 {
+		b = b[:n]
+		//log.Println("http in: ", b)
+		p.conn.Write(b)
 	}
-	// read out of the buffer and write it to conn
+	pp.r.Body.Close()
 	pp.c.Header().Set("Content-type", "application/octet-stream")
-	io.Copy(pp.c, p.conn)
+
+	res := bytes.NewBuffer([]byte(p.key))
+	p.bufmux.Lock()
+	//log.Println("http out: ", p.buf.Bytes())
+	p.buf.WriteTo(res)
+	p.bufmux.Unlock()
+	io.Copy(pp.c, res)
+
 	pp.done <- true
 }
 

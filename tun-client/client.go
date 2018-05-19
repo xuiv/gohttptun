@@ -19,6 +19,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -54,22 +55,7 @@ func makeReadChan(r io.Reader, bufSize int) chan []byte {
 	return read
 }
 
-func main() {
-	flag.Parse()
-	log.SetPrefix("httptun.c: ")
-
-	listener, err := net.Listen("tcp", *listenAddr)
-	if err != nil {
-		panic(err)
-	}
-	log.Println("listen", *listenAddr)
-
-	conn, err := listener.Accept()
-	if err != nil {
-		panic(err)
-	}
-	log.Println("accept conn", "localAddr.", conn.LocalAddr(), "remoteAddr.", conn.RemoteAddr())
-
+func transfor(conn net.Conn) {
 	buf := new(bytes.Buffer)
 
 	// initiate new session and read key
@@ -80,7 +66,7 @@ func main() {
 		"text/plain",
 		buf)
 	if err != nil {
-		panic(err)
+		return
 	}
 	key, _ := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -106,10 +92,38 @@ func main() {
 				continue
 			}
 			// write http response response to conn
-			io.Copy(conn, resp.Body)
+			//io.Copy(conn, resp.Body)
+			b := make([]byte, 65536)
+			n, _ := resp.Body.Read(b)
+			if n > len(key) {
+				b = b[len(key):n]
+				conn.Write(b)
+			}
 			resp.Body.Close()
 		case b := <-read:
 			buf.Write(b)
 		}
+	}
+}
+
+func main() {
+	flag.Parse()
+	log.SetPrefix("httptun.c: ")
+
+	listener, err := net.Listen("tcp", *listenAddr)
+	if err != nil {
+		fmt.Println("can not listen on: ", *listenAddr)
+		panic(err)
+	}
+	log.Println("listen", *listenAddr)
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		log.Println("accept conn", "localAddr.", conn.LocalAddr(), "remoteAddr.", conn.RemoteAddr())
+
+		go transfor(conn)
 	}
 }
